@@ -1,0 +1,4 @@
+data/
+config.lua
+*.json
+*.dat

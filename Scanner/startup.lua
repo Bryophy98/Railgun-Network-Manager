@@ -1,0 +1,1 @@
+shell.run("scanner_pc.lua")
