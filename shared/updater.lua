@@ -3,13 +3,13 @@
 -- Save as: shared/updater.lua
 -- ============================================================================
 
-local REPO_BASE = "https://githubusercontent.com"
+local REPO_BASE = "https://githubusercontent.com" .. "Bryophy98/Railgun-Network-Manager/main/"
 local cacheBuster = "?t=" .. os.epoch("utc")
 
 local function detectRole()
     if fs.exists("data/role.dat") then
         local f = fs.open("data/role.dat", "r")
-        local r = f.readAll()
+        local r = f.readAll():match("^%s*(.-)%s*$")
         f.close()
         return r
     end
