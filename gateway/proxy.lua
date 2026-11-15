@@ -1,6 +1,6 @@
 -- ============================================================================
--- PROXY PC (Refactored Main Logic)
--- Save as: proxy.lua
+-- PROXY PC (Refactored Main Logic with Crafting CRUD & Dimension Handshake)
+-- Save as: gateway/proxy.lua
 -- ============================================================================
 
 local wizard = require("proxy_wizard")
@@ -28,8 +28,12 @@ print("  Linked Monitor:   " .. tostring(monitorComputerId or "None"))
 print("  Linked Crafting:  " .. tostring(craftingComputerId or "None"))
 print(string.rep("=", 31))
 
-rednet.open("top")    -- Ender Modem
-rednet.open("bottom") -- Local link
+-- Open all attached modems (top Ender Modem + bottom Local link)
+for _, name in ipairs(peripheral.getNames()) do
+    if peripheral.getType(name) == "modem" then
+        rednet.open(name)
+    end
+end
 
 rednet.host(PROXY_PROTOCOL, "proxy_" .. MY_DIMENSION)
 
@@ -41,10 +45,10 @@ local pendingQueries = {}
 -- Main Event Loop
 while true do
     local event, p1, p2, p3 = os.pullEvent()
-    
+
     if event == "rednet_message" then
         local senderId, message, protocol = p1, p2, p3
-        
+
         if protocol == PROXY_PROTOCOL and type(message) == "table" then
             if message.type == "ACK" then
                 local msgId = message.ackId
@@ -66,44 +70,58 @@ while true do
                 end
             else
                 rednet.send(senderId, { type = "ACK", ackId = message.id }, PROXY_PROTOCOL)
-                
-                if message.type == "GET_ITEMS" or message.type == "GET_CRAFTABLES" or message.type == "GET_IMPORTS" or message.type == "STOCK_REQUEST" then
+
+                if message.type == "GET_ITEMS"
+                    or message.type == "GET_CRAFTABLES"
+                    or message.type == "GET_CRAFT_RULES"
+                    or message.type == "GET_IMPORTS"
+                    or message.type == "STOCK_REQUEST" then
                     pendingQueries[message.id] = senderId
                 end
-                
+
                 if not processedCache[message.id] then
                     processedCache[message.id] = true
                     message.sourceProxyId = senderId
-                    
+
                     local targetClient = monitorComputerId
-                    if message.type == "GET_CRAFTABLES" or (message.type == "CONFIG_SYNC" and message.data and string.find(tostring(message.data.action), "CRAFT")) then
+                    if message.type == "GET_CRAFTABLES"
+                        or message.type == "GET_CRAFT_RULES"
+                        or (message.type == "CONFIG_SYNC" and message.data and string.find(tostring(message.data.action), "CRAFT")) then
                         targetClient = craftingComputerId or monitorComputerId
                     end
-                    
+
                     if targetClient then
-                        print(string.format("[Gateway] Forwarding flat packet type '%s' to local client ID %d", tostring(message.type), targetClient))
+                        print(string.format("[Gateway] Forwarding packet '%s' to local client ID %d", tostring(message.type), targetClient))
                         rednet.send(targetClient, message, LOCAL_PROTOCOL)
                     else
                         print("[Gateway Error] Packet dropped: No local client registered!")
                     end
                 end
             end
-            
+
         elseif protocol == LOCAL_PROTOCOL and type(message) == "table" then
             if message.type == "REGISTER_MONITOR" then
                 if monitorComputerId ~= senderId then
                     monitorComputerId = senderId
                     pnet.saveConfig(MY_DIMENSION, monitorComputerId, craftingComputerId)
                 end
-                rednet.send(senderId, { type = "GATEWAY_ACK", gatewayId = os.computerID() }, LOCAL_PROTOCOL)
-                
+                rednet.send(senderId, {
+                    type      = "GATEWAY_ACK",
+                    gatewayId = os.computerID(),
+                    dimension = MY_DIMENSION
+                }, LOCAL_PROTOCOL)
+
             elseif message.type == "REGISTER_CRAFTING_PC" then
                 if craftingComputerId ~= senderId then
                     craftingComputerId = senderId
                     pnet.saveConfig(MY_DIMENSION, monitorComputerId, craftingComputerId)
                 end
-                rednet.send(senderId, { type = "GATEWAY_ACK", gatewayId = os.computerID() }, LOCAL_PROTOCOL)
-                
+                rednet.send(senderId, {
+                    type      = "GATEWAY_ACK",
+                    gatewayId = os.computerID(),
+                    dimension = MY_DIMENSION
+                }, LOCAL_PROTOCOL)
+
             elseif message.type == "REQUEST_ACK" then
                 local msgId = message.ackId
                 local resQ = pnet.getResponseQueue()
@@ -112,28 +130,31 @@ while true do
                     resQ[msgId] = nil
                     pnet.saveQueues()
                 end
-                
-            elseif message.type == "ITEMS_RESPONSE" or message.type == "CRAFTABLES_RESPONSE" or message.type == "IMPORTS_RESPONSE" then
+
+            elseif message.type == "ITEMS_RESPONSE"
+                or message.type == "CRAFTABLES_RESPONSE"
+                or message.type == "CRAFT_RULES_RESPONSE"
+                or message.type == "IMPORTS_RESPONSE" then
                 local destinationProxyId = pendingQueries[message.id]
                 if destinationProxyId then
                     pnet.sendResponsePacket(destinationProxyId, message, message.id, false, MY_DIMENSION, PROXY_PROTOCOL, LOCAL_PROTOCOL)
                     pendingQueries[message.id] = nil
                 end
-                
+
             elseif message.type == "STOCK_RESPONSE" or message.type == "STOCK_LOW_ACK" then
                 local destinationProxyId = message.targetProxyId or pendingQueries[message.sourceQueryId]
                 if destinationProxyId then
                     pnet.sendResponsePacket(destinationProxyId, message, message.id, false, MY_DIMENSION, PROXY_PROTOCOL, LOCAL_PROTOCOL)
                 end
-                
+
             elseif message.sourceProxyId and (message.type == "STOCK_RESPONSE" or message.type == "STOCK_LOW_ACK") then
                 pnet.sendResponsePacket(monitorComputerId, message, message.id, true, MY_DIMENSION, PROXY_PROTOCOL, LOCAL_PROTOCOL)
-                
+
             elseif message.targetProxyId and message.type == "STOCK_REQUEST" then
                 pnet.sendCrossDimPacket(message.targetProxyId, message, message.id, MY_DIMENSION, PROXY_PROTOCOL)
             end
         end
-        
+
     elseif event == "timer" then
         -- Retry Request Queue
         for msgId, qItem in pairs(pnet.getOutboundQueue()) do

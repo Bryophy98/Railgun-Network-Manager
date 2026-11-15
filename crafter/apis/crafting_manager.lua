@@ -101,4 +101,17 @@ function crafting_manager.getCraftablesList()
     return cleanList
 end
 
+function crafting_manager.getRulesList()
+    local list = {}
+    for itemKey, data in pairs(craftableExports) do
+        table.insert(list, {
+            item        = tostring(itemKey),
+            targetStock = tonumber(data.targetStock) or 0,
+            batchSize   = tonumber(data.batchSize) or 0
+        })
+    end
+    return list
+end
+
+
 return crafting_manager
