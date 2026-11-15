@@ -3,7 +3,13 @@
 -- Save as: shared/updater.lua
 -- ============================================================================
 
-local REPO_BASE = "https://raw." .. "://githubusercontent.com" .. "Bryophy98/Railgun-Network-Manager/main/"
+local REPO_BASE = table.concat({
+    "https://",
+    "raw.",
+    "githubusercontent.com",
+    "/Bryophy98/Railgun-Network-Manager/main/"
+})
+
 local cacheBuster = "?t=" .. os.epoch("utc")
 
 local function detectRole()
