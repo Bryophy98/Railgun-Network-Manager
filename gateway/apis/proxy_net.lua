@@ -1,6 +1,6 @@
 -- ============================================================================
--- PROXY NET API (Queue Management & Packet Helpers)
--- Save as: apis/proxy_net.lua
+-- PROXY NET API (Queue Management & Packet Helpers with orderId)
+-- Save as: gateway/apis/proxy_net.lua
 -- ============================================================================
 
 local proxy_net = {}
@@ -64,27 +64,28 @@ end
 function proxy_net.sendCrossDimPacket(recipientProxyId, flatPayload, originalQueryId, MY_DIMENSION, PROXY_PROTOCOL)
     local msgId = string.format("%s_req_%d_%d", MY_DIMENSION, os.epoch("local"), math.random(100, 999))
     local packet = {
-        id = msgId,
+        id            = msgId,
+        orderId       = flatPayload.orderId,
         sourceQueryId = originalQueryId,
-        senderDim = MY_DIMENSION,
-        type = flatPayload.type,
+        senderDim     = MY_DIMENSION,
+        type          = flatPayload.type,
         targetProxyId = flatPayload.targetProxyId,
         sourceProxyId = flatPayload.sourceProxyId or os.computerID(),
-        item = flatPayload.item,
-        batchSize = flatPayload.batchSize,
+        item          = flatPayload.item,
+        batchSize     = flatPayload.batchSize,
         requestingDim = flatPayload.requestingDim,
-        available = flatPayload.available,
-        required = flatPayload.required
+        available     = flatPayload.available,
+        required      = flatPayload.required
     }
-    
-    print(string.format("[Gateway Out] Dispatching flat request %s to proxy ID %d", msgId, recipientProxyId))
+
+    print(string.format("[Gateway Out] Dispatching %s (%s) to proxy ID %d", msgId, tostring(packet.orderId or ""), recipientProxyId))
     rednet.send(recipientProxyId, packet, PROXY_PROTOCOL)
-    
+
     outboundQueue[msgId] = {
         recipient = recipientProxyId,
-        packet = packet,
-        attempts = 1,
-        timerId = os.startTimer(3)
+        packet    = packet,
+        attempts  = 1,
+        timerId   = os.startTimer(3)
     }
     proxy_net.saveQueues()
 end
@@ -92,30 +93,31 @@ end
 function proxy_net.sendResponsePacket(recipientId, flatPayload, originalQueryId, isLocal, MY_DIMENSION, PROXY_PROTOCOL, LOCAL_PROTOCOL)
     local msgId = string.format("%s_res_%d_%d", MY_DIMENSION, os.epoch("local"), math.random(100, 999))
     local packet = {
-        id = msgId,
+        id            = msgId,
+        orderId       = flatPayload.orderId,
         sourceQueryId = originalQueryId,
-        senderDim = MY_DIMENSION,
-        type = flatPayload.type,
+        senderDim     = MY_DIMENSION,
+        type          = flatPayload.type,
         targetProxyId = flatPayload.targetProxyId,
         sourceProxyId = flatPayload.sourceProxyId or os.computerID(),
-        item = flatPayload.item,
-        batchSize = flatPayload.batchSize,
+        item          = flatPayload.item,
+        batchSize     = flatPayload.batchSize,
         requestingDim = flatPayload.requestingDim,
-        available = flatPayload.available,
-        required = flatPayload.required,
-        data = flatPayload.data
+        available     = flatPayload.available,
+        required      = flatPayload.required,
+        data          = flatPayload.data
     }
-    
+
     local protocol = isLocal and LOCAL_PROTOCOL or PROXY_PROTOCOL
-    print(string.format("[Gateway Response] Sending flat result %s to %s ID %d", msgId, isLocal and "local client" or "proxy", recipientId))
+    print(string.format("[Gateway Response] Sending %s to %s ID %d", msgId, isLocal and "local client" or "proxy", recipientId))
     rednet.send(recipientId, packet, protocol)
-    
+
     responseQueue[msgId] = {
         recipient = recipientId,
-        packet = packet,
-        attempts = 1,
-        isLocal = isLocal,
-        timerId = os.startTimer(3)
+        packet    = packet,
+        attempts  = 1,
+        isLocal   = isLocal,
+        timerId   = os.startTimer(3)
     }
     proxy_net.saveQueues()
 end
