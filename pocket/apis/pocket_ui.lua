@@ -1,5 +1,5 @@
 -- ============================================================================
--- POCKET PRIMEUI HELPERS (26x20 Screen Layout)
+-- POCKET PRIMEUI HELPERS (26x20 Screen Layout - Safe Clamped)
 -- Save as: pocket/apis/pocket_ui.lua
 -- ============================================================================
 
@@ -7,6 +7,14 @@ local PrimeUI = require("apis.primeui")
 local net     = require("apis.pocket_net")
 
 local pocket_ui = {}
+
+local function safeText(str, maxLen)
+    local clean = tostring(str or ""):gsub("§.", "")
+    if #clean > maxLen then
+        return clean:sub(1, maxLen)
+    end
+    return clean
+end
 
 function pocket_ui.drawFrame(title)
     PrimeUI.clear()
@@ -16,15 +24,18 @@ function pocket_ui.drawFrame(title)
     term.setBackgroundColor(colors.blue)
     term.setTextColor(colors.white)
     term.clearLine()
-    local label = tostring(title):sub(1, 24)
-    PrimeUI.centerLabel(term.current(), 1, 1, 26, label, colors.white, colors.blue)
+    PrimeUI.centerLabel(term.current(), 1, 1, 26, safeText(title, 24), colors.white, colors.blue)
 end
 
 function pocket_ui.status(title, line1, line2, color)
     pocket_ui.drawFrame(title)
     PrimeUI.borderBox(term.current(), 2, 4, 24, 12, color or colors.cyan, colors.black)
-    if line1 then PrimeUI.centerLabel(term.current(), 2, 8, 24, tostring(line1):sub(1, 24), colors.white, colors.black) end
-    if line2 then PrimeUI.centerLabel(term.current(), 2, 10, 24, tostring(line2):sub(1, 24), colors.lightGray, colors.black) end
+    if line1 then
+        PrimeUI.centerLabel(term.current(), 3, 8, 22, safeText(line1, 22), colors.white, colors.black)
+    end
+    if line2 then
+        PrimeUI.centerLabel(term.current(), 3, 10, 22, safeText(line2, 22), colors.lightGray, colors.black)
+    end
 end
 
 function pocket_ui.selectDimension(promptTitle)
@@ -59,7 +70,16 @@ function pocket_ui.acquireItemKey()
     local _, action = PrimeUI.run()
     if action == "SCAN" then
         pocket_ui.status("SCANNER", "Pinging ID 12...", "Hold item in off-hand", colors.yellow)
-        return net.scanRemoteItem()
+        local scanned = net.scanRemoteItem()
+        if scanned then
+            pocket_ui.status("SCANNED", safeText(scanned, 22), nil, colors.lime)
+            sleep(1)
+            return scanned
+        else
+            pocket_ui.status("SCAN FAILED", "No item / Timeout", nil, colors.red)
+            sleep(1.5)
+            return nil
+        end
     elseif action == "MANUAL" then
         pocket_ui.drawFrame("ENTER ITEM ID")
         PrimeUI.borderBox(term.current(), 2, 6, 24, 1, colors.cyan, colors.black)
@@ -76,7 +96,7 @@ end
 
 function pocket_ui.promptNumbers(title, itemLabel)
     pocket_ui.drawFrame(title)
-    PrimeUI.label(term.current(), 2, 3, tostring(itemLabel):sub(1, 24), colors.yellow, colors.black)
+    PrimeUI.label(term.current(), 2, 3, safeText(itemLabel, 24), colors.yellow, colors.black)
     PrimeUI.label(term.current(), 2, 5, "Target Minimum Stock:", colors.white, colors.black)
     PrimeUI.borderBox(term.current(), 2, 7, 24, 1, colors.cyan, colors.black)
     PrimeUI.inputBox(term.current(), 2, 7, 24, "NEXT", colors.white, colors.gray)
@@ -87,7 +107,7 @@ function pocket_ui.promptNumbers(title, itemLabel)
     if act1 ~= "NEXT" or not targetStock then return nil, nil end
 
     pocket_ui.drawFrame(title)
-    PrimeUI.label(term.current(), 2, 3, tostring(itemLabel):sub(1, 24), colors.yellow, colors.black)
+    PrimeUI.label(term.current(), 2, 3, safeText(itemLabel, 24), colors.yellow, colors.black)
     PrimeUI.label(term.current(), 2, 5, "Batch Size:", colors.white, colors.black)
     PrimeUI.borderBox(term.current(), 2, 7, 24, 1, colors.cyan, colors.black)
     PrimeUI.inputBox(term.current(), 2, 7, 24, "DONE", colors.white, colors.gray)
