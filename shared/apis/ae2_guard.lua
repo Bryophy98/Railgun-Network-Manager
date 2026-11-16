@@ -20,6 +20,27 @@ local function sendChatAlert(chatBox, message)
     end)
 end
 
+local function checkNetworkLive(me)
+    local methods = { "getEnergyStorage", "getEnergyStored", "getStoredEnergy", "getEnergyUsage" }
+    for _, method in ipairs(methods) do
+        if type(me[method]) == "function" then
+            local ok, r1, r2 = pcall(me[method])
+            if ok then
+                -- Case 1: returns (boolean, number) e.g. true, 125000
+                if type(r1) == "boolean" then
+                    if r1 and type(r2) == "number" and r2 > 0 then
+                        return true
+                    end
+                -- Case 2: returns (number) directly e.g. 125000
+                elseif type(r1) == "number" and r1 > 0 then
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
 function ae2_guard.isOnline(me, chatBox, dimensionName)
     local dimLabel = string.upper(dimensionName or "UNKNOWN")
 
@@ -32,11 +53,7 @@ function ae2_guard.isOnline(me, chatBox, dimensionName)
     end
     missingBridgeWarned = false
 
-    local ok, energy = pcall(function()
-        return me.getEnergyStored()
-    end)
-
-    local hasPower = ok and type(energy) == "number" and energy > 0
+    local hasPower = checkNetworkLive(me)
 
     if not hasPower then
         if wasPowered then
@@ -47,7 +64,7 @@ function ae2_guard.isOnline(me, chatBox, dimensionName)
     end
 
     if not wasPowered then
-        sendChatAlert(chatBox, string.format("§a[POWER RESTORED - %s] AE2 network online. Logistics resumed.", dimLabel))
+        sendChatAlert(chatBox, string.format("§a[POWER RESTORED - %s] AE2 network back online. Logistics resumed.", dimLabel))
         wasPowered = true
     end
 
