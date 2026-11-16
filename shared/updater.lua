@@ -1,5 +1,5 @@
 -- ============================================================================
--- SHARED GITHUB OTA UPDATER (Strict Role Detection - No Silent Fallback)
+-- SHARED GITHUB OTA UPDATER (Strict Role Detection + CDN Cache Bypass)
 -- Save as: shared/updater.lua
 -- ============================================================================
 
@@ -10,7 +10,10 @@ local REPO_BASE = table.concat({
     "/Bryophy98/Railgun-Network-Manager/main/"
 })
 
-local cacheBuster = "?t=" .. os.epoch("utc")
+local NO_CACHE_HEADERS = {
+    ["Cache-Control"] = "no-cache, no-store, must-revalidate",
+    ["Pragma"]        = "no-cache"
+}
 
 local function detectRole()
     if fs.exists("data/role.dat") then
@@ -28,15 +31,26 @@ local function detectRole()
 end
 
 local function downloadFile(repoPath, destPath)
-    local response = http.get(REPO_BASE .. repoPath .. cacheBuster)
+    local url = REPO_BASE .. repoPath .. "?cb=" .. tostring(os.epoch("utc"))
+    local response = http.get(url, NO_CACHE_HEADERS)
     if not response then
         return false, "HTTP request failed: " .. repoPath
     end
+
     local content = response.readAll()
     response.close()
 
+    if not content or content == "" then
+        return false, "Empty response for: " .. repoPath
+    end
+
     local tmpPath = destPath .. ".tmp"
+    if fs.exists(tmpPath) then fs.delete(tmpPath) end
+
     local f = fs.open(tmpPath, "w")
+    if not f then
+        return false, "Could not open temp file: " .. tmpPath
+    end
     f.write(content)
     f.close()
 
