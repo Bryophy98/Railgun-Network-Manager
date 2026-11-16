@@ -1,31 +1,44 @@
 -- ============================================================================
--- POCKET IMPORT CRUD MENU
+-- POCKET IMPORT CRUD MENU (PrimeUI 26x20 Layout)
 -- Save as: pocket/apis/import_menu.lua
 -- ============================================================================
 
-local net = require("apis.pocket_net")
-local ui  = require("apis.pocket_ui")
+local PrimeUI = require("apis.primeui")
+local net     = require("apis.pocket_net")
+local ui      = require("apis.pocket_ui")
 
 local import_menu = {}
+
+local function shortItemName(fullId)
+    return tostring(fullId):match(":(.+)$") or tostring(fullId)
+end
+
+local function shortStatus(st)
+    local map = {
+        IDLE       = "IDLE",
+        PENDING    = "PEND",
+        IN_TRANSIT = "TRAN",
+        COOLDOWN   = "COOL"
+    }
+    return map[st] or tostring(st or "IDLE"):sub(1, 4)
+end
 
 local function addOrEdit(targetDim, targetProxyId, prefillItem, prefillSupplierId)
     local itemKey = prefillItem or ui.acquireItemKey()
     if not itemKey then return end
 
-    write("Target Minimum Stock: ")
-    local targetStock = tonumber(read())
-    write("Shipment Batch Size: ")
-    local batchSize = tonumber(read())
+    local targetStock, batchSize = ui.promptNumbers("IMPORT THRESHOLDS", shortItemName(itemKey))
+    if not targetStock or not batchSize then return end
 
     local sourceProxyId = prefillSupplierId
     if not sourceProxyId then
-        local sourceDim = ui.selectDimension("SELECT SUPPLIER DEPOT")
+        local sourceDim = ui.selectDimension("SUPPLIER DIMENSION")
         if not sourceDim then return end
         sourceProxyId = net.resolveProxyId(sourceDim)
     end
 
-    if not targetStock or not batchSize or not sourceProxyId then
-        print("\n§cInvalid numeric values or supplier proxy!")
+    if not sourceProxyId then
+        ui.status("ERROR", "Supplier proxy offline", nil, colors.red)
         sleep(2)
         return
     end
@@ -38,71 +51,86 @@ local function addOrEdit(targetDim, targetProxyId, prefillItem, prefillSupplierI
         sourceProxyId = sourceProxyId
     }
 
-    ui.header("SAVING IMPORT RULE")
-    print("Sending to " .. targetDim:upper() .. "...")
+    ui.status("SAVING RULE", "Sending to " .. targetDim:upper(), nil, colors.cyan)
     if net.sendAndAwait(targetProxyId, "CONFIG_SYNC", payload, "ACK", 3) then
-        print("\n§aImport rule saved!")
+        ui.status("SUCCESS", "Import rule saved!", nil, colors.lime)
     else
-        print("\n§cFailed to reach target proxy.")
+        ui.status("TIMEOUT", "No ACK from gateway", nil, colors.red)
     end
     sleep(1.5)
 end
 
 function import_menu.run()
-    local targetDim = ui.selectDimension("MANAGE IMPORTS FOR DIMENSION")
+    local targetDim = ui.selectDimension("IMPORTS: SELECT DEPOT")
     if not targetDim then return end
 
     local targetProxyId = net.resolveProxyId(targetDim)
     if not targetProxyId then
-        print("\n§cCould not resolve proxy for: " .. targetDim)
+        ui.status("OFFLINE", "Proxy not found:", targetDim:upper(), colors.red)
         sleep(2)
         return
     end
 
     while true do
-        ui.header("IMPORTS: " .. targetDim:upper())
-        print("Fetching rules...")
-        local imports = net.sendAndAwait(targetProxyId, "GET_IMPORTS", nil, "IMPORTS_RESPONSE", 4)
+        ui.status(targetDim:upper() .. " IMPORTS", "Fetching rules...", nil, colors.cyan)
+        local imports = net.sendAndAwait(targetProxyId, "GET_IMPORTS", nil, "IMPORTS_RESPONSE", 4) or {}
 
-        ui.header("IMPORTS: " .. targetDim:upper())
-        if not imports or #imports == 0 then
-            print("\nNo active import rules found.")
-            print("\n[A] Add Rule | Back")
-            write("Choice: ")
-            if string.lower(read()) == "a" then
-                addOrEdit(targetDim, targetProxyId)
-            else
-                return
-            end
+        ui.drawFrame(string.format("%s IMPORTS (%d)", targetDim:upper(), #imports))
+
+        local selectedIdx = 1
+        local entries = {}
+        if #imports == 0 then
+            entries = { "(No import rules)" }
         else
-            for i, rule in ipairs(imports) do
-                print(string.format("%d. %s [%s]", i, tostring(rule.item), tostring(rule.status or "IDLE")))
-                print(string.format("   Stock: %d | Batch: %d", tonumber(rule.targetStock) or 0, tonumber(rule.batchSize) or 0))
+            for _, rule in ipairs(imports) do
+                local name = shortItemName(rule.item):sub(1, 16)
+                local st   = shortStatus(rule.status)
+                table.insert(entries, string.format("%-16s [%s]", name, st))
             end
+        end
 
-            print("\n[A] Add | [E] Edit # | [D] Delete # | Back")
-            write("Choice: ")
-            local act = string.lower(read())
-
-            if act == "a" then
-                addOrEdit(targetDim, targetProxyId)
-            elseif act == "e" then
-                write("Rule # to edit: ")
-                local selected = imports[tonumber(read()) or 0]
-                if selected then
-                    addOrEdit(targetDim, targetProxyId, selected.item, selected.sourceProxyId)
-                end
-            elseif act == "d" then
-                write("Rule # to delete: ")
-                local selected = imports[tonumber(read()) or 0]
-                if selected then
-                    net.sendAndAwait(targetProxyId, "CONFIG_SYNC", { action = "REMOVE_IMPORT", item = selected.item }, "ACK", 3)
-                    print("§cDeleted " .. selected.item)
-                    sleep(1.5)
-                end
-            else
-                return
+        PrimeUI.borderBox(term.current(), 2, 3, 24, 9, colors.cyan, colors.black)
+        PrimeUI.selectionBox(term.current(), 2, 3, 24, 9, entries, "ENTER_ITEM", function(idx)
+            selectedIdx = idx
+            local r = imports[idx]
+            term.setCursorPos(2, 14)
+            term.setBackgroundColor(colors.black)
+            term.clearLine()
+            term.setCursorPos(2, 15)
+            term.clearLine()
+            if r then
+                PrimeUI.label(term.current(), 2, 14, shortItemName(r.item):sub(1, 24), colors.yellow, colors.black)
+                PrimeUI.label(term.current(), 2, 15, string.format("Min:%d Batch:%d", r.targetStock or 0, r.batchSize or 0):sub(1, 24), colors.lightGray, colors.black)
             end
+        end, colors.white, colors.black)
+
+        if imports[1] then
+            local r = imports[1]
+            PrimeUI.label(term.current(), 2, 14, shortItemName(r.item):sub(1, 24), colors.yellow, colors.black)
+            PrimeUI.label(term.current(), 2, 15, string.format("Min:%d Batch:%d", r.targetStock or 0, r.batchSize or 0):sub(1, 24), colors.lightGray, colors.black)
+        end
+
+        PrimeUI.button(term.current(), 1, 18, "Add", "ADD", colors.black, colors.lime, colors.green)
+        if #imports > 0 then
+            PrimeUI.button(term.current(), 7, 18, "Edit", "EDIT", colors.black, colors.yellow, colors.orange)
+            PrimeUI.button(term.current(), 14, 18, "Del", "DEL", colors.white, colors.red, colors.gray)
+        end
+        PrimeUI.button(term.current(), 20, 18, "Back", "BACK", colors.white, colors.gray, colors.lightGray)
+        PrimeUI.keyAction(keys.backspace, "BACK")
+
+        local _, action = PrimeUI.run()
+        if action == "ADD" then
+            addOrEdit(targetDim, targetProxyId)
+        elseif (action == "EDIT" or action == "ENTER_ITEM") and imports[selectedIdx] then
+            local sel = imports[selectedIdx]
+            addOrEdit(targetDim, targetProxyId, sel.item, sel.sourceProxyId)
+        elseif action == "DEL" and imports[selectedIdx] then
+            local sel = imports[selectedIdx]
+            ui.status("DELETING", shortItemName(sel.item), nil, colors.red)
+            net.sendAndAwait(targetProxyId, "CONFIG_SYNC", { action = "REMOVE_IMPORT", item = sel.item }, "ACK", 3)
+            sleep(1)
+        elseif action == "BACK" then
+            return
         end
     end
 end
