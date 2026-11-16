@@ -32,7 +32,8 @@ return {
         ["apis/pocket_net.lua"]  = "pocket/apis/pocket_net.lua",
         ["apis/pocket_ui.lua"]   = "pocket/apis/pocket_ui.lua",
         ["apis/import_menu.lua"] = "pocket/apis/import_menu.lua",
-        ["apis/craft_menu.lua"]  = "pocket/apis/craft_menu.lua"
+        ["apis/craft_menu.lua"]  = "pocket/apis/craft_menu.lua",
+        ["apis/primeui.lua"] = "pocket/apis/primeui.lua"
     },
     scanner = {
         ["startup.lua"]    = "shared/startup.lua",

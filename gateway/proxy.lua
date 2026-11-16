@@ -135,7 +135,7 @@ while true do
                 or message.type == "CRAFTABLES_RESPONSE"
                 or message.type == "CRAFT_RULES_RESPONSE"
                 or message.type == "IMPORTS_RESPONSE" then
-                local destinationProxyId = pendingQueries[message.id]
+                local destinationProxyId = pendingQueries[message.id] or message.targetProxyId
                 if destinationProxyId then
                     pnet.sendResponsePacket(destinationProxyId, message, message.id, false, MY_DIMENSION, PROXY_PROTOCOL, LOCAL_PROTOCOL)
                     pendingQueries[message.id] = nil
