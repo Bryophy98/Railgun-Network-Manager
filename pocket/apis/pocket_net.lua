@@ -1,11 +1,12 @@
 -- ============================================================================
 -- POCKET PC NETWORK API
--- Save as: apis/pocket_net.lua
+-- Save as: pocket/apis/pocket_net.lua
 -- ============================================================================
 
 local pocket_net = {}
 
 local PROXY_PROTOCOL = "dim_transport"
+local OTA_PROTOCOL   = "OTA_UPDATE"
 local DIM_LIST = {"earth", "beneath", "moon", "mars", "venus", "mercury"}
 
 function pocket_net.init()
@@ -27,10 +28,16 @@ function pocket_net.getRemoteImports(targetProxyId)
     return pocket_net.sendAndAwait(targetProxyId, "GET_IMPORTS", nil, "IMPORTS_RESPONSE", 4)
 end
 
+function pocket_net.broadcastOtaUpdate()
+    local updateId = os.epoch("utc")
+    rednet.broadcast({ cmd = "RUN_UPDATE", id = updateId }, OTA_PROTOCOL)
+    return updateId
+end
+
 function pocket_net.scanRemoteItem()
     local scannerId = 12 -- Fixed static ID for the Inventory Scanner PC
     local msgId = string.format("scan_%d", os.epoch("local"))
-    
+
     rednet.send(scannerId, { type = "GET_OFFHAND_ITEM", id = msgId }, "scanner_link")
 
     local timerId = os.startTimer(3)
@@ -60,10 +67,10 @@ end
 function pocket_net.sendAndAwait(targetProxyId, reqType, payloadData, expectedRespType, timeoutSec)
     local msgId = string.format("pocket_%d_%d", os.computerID(), os.epoch("local"))
     local packet = {
-        id = msgId,
+        id        = msgId,
         senderDim = "pocket_pc",
-        type = reqType,
-        data = payloadData
+        type      = reqType,
+        data      = payloadData
     }
 
     print(string.format("[PocketNet] Sending %s (ID: %s) to Proxy ID %d...", reqType, msgId, targetProxyId))
@@ -75,8 +82,10 @@ function pocket_net.sendAndAwait(targetProxyId, reqType, payloadData, expectedRe
         if event == "rednet_message" then
             local senderId, msg, proto = p1, p2, p3
             if proto == PROXY_PROTOCOL and type(msg) == "table" then
-                print(string.format("[PocketNet] Received response type '%s' from #%d", tostring(msg.type), senderId))
-                if msg.type == expectedRespType and msg.id == msgId then
+                local matchesQuery = (msg.id == msgId) or (msg.sourceQueryId == msgId)
+                if msg.type == expectedRespType and matchesQuery then
+                    -- Acknowledge receipt so Gateway clears responseQueue
+                    rednet.send(senderId, { type = "RESPONSE_ACK", ackId = msg.id }, PROXY_PROTOCOL)
                     print("[PocketNet] Response matched successfully!")
                     return msg.data
                 elseif msg.type == "ACK" and reqType == "CONFIG_SYNC" and msg.ackId == msgId then
