@@ -16,15 +16,16 @@ end
 local function detectRole()
     if fs.exists("data/role.dat") then
         local f = fs.open("data/role.dat", "r")
-        local r = f.readAll()
+        local r = f.readAll():match("^%s*(.-)%s*$")
         f.close()
-        return r
+        if r and r ~= "" then return r end
     end
     if fs.exists("proxy.lua") then return "gateway" end
     if fs.exists("monitor.lua") then return "monitor" end
     if fs.exists("crafting_controller.lua") then return "crafter" end
     if fs.exists("pocket.lua") then return "pocket" end
-    return "scanner"
+    if fs.exists("scanner_pc.lua") then return "scanner" end
+    return nil
 end
 
 local ROLE_ENTRY = {
