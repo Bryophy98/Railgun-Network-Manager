@@ -9,12 +9,13 @@ local net     = require("apis.pocket_net")
 local pocket_ui = {}
 
 local function safeText(str, maxLen)
-    local clean = tostring(str or ""):gsub("§.", "")
+    local clean = tostring(str or ""):gsub("[^\32-\126]", "")
     if #clean > maxLen then
         return clean:sub(1, maxLen)
     end
     return clean
 end
+
 
 function pocket_ui.drawFrame(title)
     PrimeUI.clear()
@@ -70,13 +71,13 @@ function pocket_ui.acquireItemKey()
     local _, action = PrimeUI.run()
     if action == "SCAN" then
         pocket_ui.status("SCANNER", "Pinging ID 12...", "Hold item in off-hand", colors.yellow)
-        local scanned = net.scanRemoteItem()
+        local scanned, err = net.scanRemoteItem()
         if scanned then
             pocket_ui.status("SCANNED", safeText(scanned, 22), nil, colors.lime)
             sleep(1)
             return scanned
         else
-            pocket_ui.status("SCAN FAILED", "No item / Timeout", nil, colors.red)
+            pocket_ui.status("SCAN FAILED", safeText(err or "No item", 22), nil, colors.red)
             sleep(1.5)
             return nil
         end
