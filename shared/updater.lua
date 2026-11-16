@@ -1,5 +1,5 @@
 -- ============================================================================
--- SHARED GITHUB OTA UPDATER
+-- SHARED GITHUB OTA UPDATER (Strict Role Detection - No Silent Fallback)
 -- Save as: shared/updater.lua
 -- ============================================================================
 
@@ -17,13 +17,14 @@ local function detectRole()
         local f = fs.open("data/role.dat", "r")
         local r = f.readAll():match("^%s*(.-)%s*$")
         f.close()
-        return r
+        if r and r ~= "" then return r end
     end
     if fs.exists("proxy.lua") then return "gateway" end
     if fs.exists("monitor.lua") then return "monitor" end
     if fs.exists("crafting_controller.lua") then return "crafter" end
     if fs.exists("pocket.lua") then return "pocket" end
-    return "scanner"
+    if fs.exists("scanner_pc.lua") then return "scanner" end
+    return nil
 end
 
 local function downloadFile(repoPath, destPath)
@@ -47,6 +48,17 @@ local function downloadFile(repoPath, destPath)
 end
 
 local role = detectRole()
+
+if not role then
+    print("[OTA] No role assigned to this PC.")
+    write("Enter role name (gateway/monitor/crafter/pocket/scanner): ")
+    role = read():match("^%s*(.-)%s*$"):lower()
+    if not role or role == "" then
+        printError("[OTA] Aborted: Role cannot be empty.")
+        return
+    end
+end
+
 if not fs.exists("data") then fs.makeDir("data") end
 local rf = fs.open("data/role.dat", "w")
 rf.write(role)
