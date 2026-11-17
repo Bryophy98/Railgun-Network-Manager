@@ -1,6 +1,6 @@
 -- ============================================================================
--- PrimeUI by JackMacWindows (Bundled for Pocket PC)
--- Save as: pocket/apis/primeui.lua
+-- PrimeUI by JackMacWindows (Bundled for UI)
+-- Save as: shared/apis/primeui.lua
 -- ============================================================================
 
 local expect = require("cc.expect").expect
