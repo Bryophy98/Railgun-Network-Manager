@@ -1,10 +1,11 @@
 -- ============================================================================
--- PROXY PC (Refactored Main Logic with Crafting CRUD & Dimension Handshake)
+-- PROXY PC (Grayscale PrimeUI Dashboard + Crafting CRUD & Handshake)
 -- Save as: gateway/proxy.lua
 -- ============================================================================
 
 local wizard = require("proxy_wizard")
-local pnet = require("apis.proxy_net")
+local pnet   = require("apis.proxy_net")
+local dash   = require("apis.node_dashboard")
 
 local config = wizard.load()
 if not config then
@@ -12,23 +13,25 @@ if not config then
     config = wizard.load()
 end
 
-local MY_DIMENSION = config.dimension
-local monitorComputerId = config.monitorId
+local MY_DIMENSION       = config.dimension
+local monitorComputerId  = config.monitorId
 local craftingComputerId = config.craftingId or nil
 
 local PROXY_PROTOCOL = "dim_transport"
 local LOCAL_PROTOCOL = "local_proxy_link"
 
-term.clear()
-term.setCursorPos(1, 1)
-print(string.rep("=", 31))
-print("  DIMENSIONAL PROXY GATEWAY")
-print("  Dimension: " .. MY_DIMENSION:upper())
-print("  Linked Monitor:   " .. tostring(monitorComputerId or "None"))
-print("  Linked Crafting:  " .. tostring(craftingComputerId or "None"))
-print(string.rep("=", 31))
+local function updateHeader()
+    local sub = string.format("PC #%d | Mon: %s | Craft: %s",
+        os.computerID(),
+        tostring(monitorComputerId or "None"),
+        tostring(craftingComputerId or "None")
+    )
+    dash.init("PROXY GATEWAY: " .. MY_DIMENSION:upper(), sub)
+end
 
--- Open all attached modems (top Ender Modem + bottom Local link)
+updateHeader()
+_G.print = dash.log
+
 for _, name in ipairs(peripheral.getNames()) do
     if peripheral.getType(name) == "modem" then
         rednet.open(name)
@@ -36,13 +39,11 @@ for _, name in ipairs(peripheral.getNames()) do
 end
 
 rednet.host(PROXY_PROTOCOL, "proxy_" .. MY_DIMENSION)
-
 pnet.loadQueues()
 
 local processedCache = {}
 local pendingQueries = {}
 
--- Main Event Loop
 while true do
     local event, p1, p2, p3 = os.pullEvent()
 
@@ -57,7 +58,7 @@ while true do
                     os.cancelTimer(q[msgId].timerId)
                     q[msgId] = nil
                     pnet.saveQueues()
-                    print(string.format("[ACK] Request packet %s delivered & cleared.", msgId))
+                    dash.log(string.format("[ACK] Request %s delivered.", msgId))
                 end
             elseif message.type == "RESPONSE_ACK" then
                 local msgId = message.ackId
@@ -66,7 +67,7 @@ while true do
                     os.cancelTimer(resQ[msgId].timerId)
                     resQ[msgId] = nil
                     pnet.saveQueues()
-                    print(string.format("[Response ACK] Result packet %s acknowledged & cleared.", msgId))
+                    dash.log(string.format("[Response ACK] %s cleared.", msgId))
                 end
             else
                 rednet.send(senderId, { type = "ACK", ackId = message.id }, PROXY_PROTOCOL)
@@ -91,10 +92,10 @@ while true do
                     end
 
                     if targetClient then
-                        print(string.format("[Gateway] Forwarding packet '%s' to local client ID %d", tostring(message.type), targetClient))
+                        dash.log(string.format("[Gateway] -> %s to #%d", tostring(message.type), targetClient))
                         rednet.send(targetClient, message, LOCAL_PROTOCOL)
                     else
-                        print("[Gateway Error] Packet dropped: No local client registered!")
+                        dash.log("[Error] Dropped: No local client!")
                     end
                 end
             end
@@ -104,23 +105,17 @@ while true do
                 if monitorComputerId ~= senderId then
                     monitorComputerId = senderId
                     pnet.saveConfig(MY_DIMENSION, monitorComputerId, craftingComputerId)
+                    dash.setStatus(nil, string.format("PC #%d | Mon: %s | Craft: %s", os.computerID(), tostring(monitorComputerId), tostring(craftingComputerId or "None")))
                 end
-                rednet.send(senderId, {
-                    type      = "GATEWAY_ACK",
-                    gatewayId = os.computerID(),
-                    dimension = MY_DIMENSION
-                }, LOCAL_PROTOCOL)
+                rednet.send(senderId, { type = "GATEWAY_ACK", gatewayId = os.computerID(), dimension = MY_DIMENSION }, LOCAL_PROTOCOL)
 
             elseif message.type == "REGISTER_CRAFTING_PC" then
                 if craftingComputerId ~= senderId then
                     craftingComputerId = senderId
                     pnet.saveConfig(MY_DIMENSION, monitorComputerId, craftingComputerId)
+                    dash.setStatus(nil, string.format("PC #%d | Mon: %s | Craft: %s", os.computerID(), tostring(monitorComputerId or "None"), tostring(craftingComputerId)))
                 end
-                rednet.send(senderId, {
-                    type      = "GATEWAY_ACK",
-                    gatewayId = os.computerID(),
-                    dimension = MY_DIMENSION
-                }, LOCAL_PROTOCOL)
+                rednet.send(senderId, { type = "GATEWAY_ACK", gatewayId = os.computerID(), dimension = MY_DIMENSION }, LOCAL_PROTOCOL)
 
             elseif message.type == "REQUEST_ACK" then
                 local msgId = message.ackId
@@ -156,7 +151,6 @@ while true do
         end
 
     elseif event == "timer" then
-        -- Retry Request Queue
         for msgId, qItem in pairs(pnet.getOutboundQueue()) do
             if qItem.timerId == p1 then
                 if qItem.attempts < 5 then
@@ -170,7 +164,6 @@ while true do
                 end
             end
         end
-        -- Retry Response Queue
         for msgId, qItem in pairs(pnet.getResponseQueue()) do
             if qItem.timerId == p1 then
                 if qItem.attempts < 5 then
