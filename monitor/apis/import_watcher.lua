@@ -1,5 +1,5 @@
 -- ============================================================================
--- IMPORT WATCHER API (Buyer State Machine & Disk Persistence)
+-- IMPORT WATCHER API (Buyer State Machine + High-Consumption Arrival Check)
 -- Save as: monitor/apis/import_watcher.lua
 -- ============================================================================
 
@@ -8,12 +8,13 @@ local ae2_guard = require("apis.ae2_guard")
 
 local import_watcher = {}
 
-local MY_DIMENSION  = "unknown"
-local localProtocol = "local_proxy_link"
-local me            = nil
-local chatBox       = nil
-local proxyTargetId = nil
-local importsTable  = {}
+local MY_DIMENSION       = "unknown"
+local localProtocol      = "local_proxy_link"
+local me                 = nil
+local chatBox            = nil
+local proxyTargetId      = nil
+local importsTable       = {}
+local TRANSIT_TIMEOUT_SEC = 60
 
 local function makeOrderId(dim, itemKey)
     return string.lower(dim) .. ":" .. tostring(itemKey)
@@ -56,6 +57,7 @@ function import_watcher.init(dimension, meRef, chatRef)
             sourceProxyId     = tonumber(entry.sourceProxyId) or 0,
             status            = entry.status or "IDLE",
             baselineStock     = tonumber(entry.baselineStock) or 0,
+            lowestStock       = tonumber(entry.lowestStock) or tonumber(entry.baselineStock) or 0,
             targetWhenOrdered = tonumber(entry.targetWhenOrdered) or 0,
             expiry            = tonumber(entry.expiry) or 0,
             updatedAt         = tonumber(entry.updatedAt) or 0
@@ -81,6 +83,7 @@ function import_watcher.setRule(itemKey, targetStock, batchSize, sourceProxyId)
         sourceProxyId     = sourceProxyId,
         status            = existing and existing.status or "IDLE",
         baselineStock     = existing and existing.baselineStock or 0,
+        lowestStock       = existing and existing.lowestStock or 0,
         targetWhenOrdered = existing and existing.targetWhenOrdered or 0,
         expiry            = existing and existing.expiry or 0,
         updatedAt         = os.epoch("local") / 1000
@@ -114,6 +117,7 @@ function import_watcher.tick()
             chat(string.format("§c[Import Alert] %s low (%d/%d). Requesting...", orderId, amount, rule.targetStock))
             rule.status        = "PENDING"
             rule.baselineStock = amount
+            rule.lowestStock   = amount
             rule.updatedAt     = now
             dirty = true
 
@@ -131,11 +135,24 @@ function import_watcher.tick()
             rule.updatedAt = now
             dirty = true
 
-        elseif rule.status == "IN_TRANSIT" and amount >= (rule.targetWhenOrdered or (rule.baselineStock + 1)) then
-            chat(string.format("§a[Import Success] Restock arrived for %s! Current: %d", orderId, amount))
-            rule.status    = "IDLE"
-            rule.updatedAt = now
-            dirty = true
+        elseif rule.status == "IN_TRANSIT" then
+            -- Track lowest observed stock so even a small net uptick confirms arrival
+            if amount < (rule.lowestStock or amount) then
+                rule.lowestStock = amount
+                dirty = true
+            end
+
+            if amount > (rule.lowestStock or rule.baselineStock) then
+                chat(string.format("§a[Import Success] Restock detected for %s! Current: %d", orderId, amount))
+                rule.status    = "IDLE"
+                rule.updatedAt = now
+                dirty = true
+            elseif (now - (rule.updatedAt or 0)) >= TRANSIT_TIMEOUT_SEC then
+                chat(string.format("§e[Import Timeout] 60s elapsed for %s (consumed in flight). Resuming.", orderId))
+                rule.status    = "IDLE"
+                rule.updatedAt = now
+                dirty = true
+            end
 
         elseif rule.status == "COOLDOWN" and now >= (rule.expiry or 0) then
             rule.status    = "IDLE"
@@ -162,6 +179,7 @@ function import_watcher.handleResponse(msg)
             if ok and stock then cur = stock.amount or cur end
         end
         rule.status            = "IN_TRANSIT"
+        rule.lowestStock       = cur
         rule.targetWhenOrdered = cur + qty
         rule.updatedAt         = now
         import_watcher.persist()
