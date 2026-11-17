@@ -1,5 +1,5 @@
 -- ============================================================================
--- EXPORT SHIPPER API (Supplier Railgun Fulfillment & Deduplication)
+-- EXPORT SHIPPER API (Supplier Railgun Fulfillment + Per-Request Dedupe)
 -- Save as: monitor/apis/export_shipper.lua
 -- ============================================================================
 
@@ -54,19 +54,27 @@ function export_shipper.fulfill(req)
     local sourceProxyId = req.sourceProxyId or (req.data and req.data.sourceProxyId)
     local orderId       = req.orderId or (req.data and req.data.orderId)
                           or (requestingDim and item and (string.lower(requestingDim) .. ":" .. tostring(item)))
+    local dedupeKey     = req.reqId or (req.data and req.data.reqId) or req.id or orderId
 
     if not item or not batchSize or not requestingDim then return end
     if not ae2_guard.isOnline(me, chatBox, MY_DIMENSION) then return end
 
-    -- Deduplicate recently shipped orders across TFG chunk unloads
+    -- Deduplicate only exact packet retries (by unique reqId), allowing rapid consecutive orders
     local now = os.epoch("local") / 1000
-    if orderId and fulfilledOrders[orderId] and (now - fulfilledOrders[orderId]) < 45 then
-        print(string.format("[Export Dedupe] %s already shipped recently. Re-sending ACK.", orderId))
+    if dedupeKey and fulfilledOrders[dedupeKey] and (now - fulfilledOrders[dedupeKey]) < 120 then
+        print(string.format("[Export Dedupe] Packet %s already shipped. Re-sending ACK.", tostring(dedupeKey)))
         sendReply(sourceProxyId, "STOCK_RESPONSE", {
             orderId = orderId, item = item, batchSize = batchSize,
             data    = { orderId = orderId, item = item, batchSize = batchSize }
         })
         return
+    end
+
+    -- Prune old dedupe entries older than 5 minutes so fulfilled_orders.dat stays tiny
+    for k, ts in pairs(fulfilledOrders) do
+        if (now - ts) > 300 then
+            fulfilledOrders[k] = nil
+        end
     end
 
     local targetPeripheral = dimRoutes[requestingDim]
@@ -84,8 +92,8 @@ function export_shipper.fulfill(req)
         end)
 
         if success then
-            if orderId then
-                fulfilledOrders[orderId] = now
+            if dedupeKey then
+                fulfilledOrders[dedupeKey] = now
                 storage.save("fulfilled_orders.dat", fulfilledOrders)
             end
             chat(string.format("§a[Export Success] Dispatched %s to %s", orderId, requestingDim))
