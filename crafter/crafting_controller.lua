@@ -1,15 +1,14 @@
 -- ============================================================================
--- DEDICATED CRAFTING CONTROLLER PC (Gateway-Bound Local Microservice)
+-- DEDICATED CRAFTING CONTROLLER PC (Grayscale PrimeUI Dashboard)
 -- Save as: crafter/crafting_controller.lua
 -- ============================================================================
 
 local crafting_manager = require("apis.crafting_manager")
+local dash             = require("apis.node_dashboard")
 
 local PROXY_LOCAL_PROTOCOL = "local_proxy_link"
 
-if not fs.exists("data") then
-    fs.makeDir("data")
-end
+if not fs.exists("data") then fs.makeDir("data") end
 
 local gatewayProxyId = nil
 if fs.exists("data/crafting_gateway.dat") then
@@ -25,12 +24,16 @@ if fs.exists("data/dimension.dat") then
     f.close()
 end
 
-local me = peripheral.find("meBridge")
+local me      = peripheral.find("meBridge")
 local chatBox = peripheral.find("chatBox")
 
-if not me then
-    print("[Warning] ME Bridge not found on Crafting PC!")
-end
+dash.init(
+    "CRAFTER: " .. myDimension:upper(),
+    string.format("PC #%d | GW: %s | ME: %s", os.computerID(), tostring(gatewayProxyId or "Seeking"), me and "OK" or "Missing")
+)
+_G.print = dash.log
+
+if not me then dash.log("[Warning] ME Bridge not found on Crafting PC!") end
 
 if peripheral.getType("bottom") == "modem" then
     rednet.open("bottom")
@@ -43,16 +46,9 @@ if gatewayProxyId then
 else
     rednet.broadcast({ type = "REGISTER_CRAFTING_PC" }, PROXY_LOCAL_PROTOCOL)
 end
-print("[Init] Sent registration ping to local Proxy gateway.")
+dash.log("[Init] Sent registration ping to Proxy gateway.")
 
 crafting_manager.init(me, chatBox, myDimension)
-
-term.clear()
-term.setCursorPos(1, 1)
-print(string.rep("=", 35))
-print("  CRAFTING CONTROLLER ONLINE")
-print("  Gateway ID: " .. tostring(gatewayProxyId or "Discovering..."))
-print(string.rep("=", 35))
 
 local stockCheckTimer = os.startTimer(5)
 
@@ -62,7 +58,6 @@ while true do
     if event == "rednet_message" then
         local senderId, message, protocol = p1, p2, p3
         if protocol == PROXY_LOCAL_PROTOCOL and type(message) == "table" then
-
             local isFromGateway = (gatewayProxyId and senderId == gatewayProxyId)
             local isAck = (message.type == "GATEWAY_ACK")
 
@@ -79,14 +74,15 @@ while true do
                     local f = fs.open("data/crafting_gateway.dat", "w")
                     f.write(tostring(gatewayProxyId))
                     f.close()
-                    print(string.format("[Gateway] Confirmed binding to local Proxy Gateway ID: %d", gatewayProxyId))
+                    dash.setStatus("CRAFTER: " .. myDimension:upper(), string.format("PC #%d | GW: #%d | ME: %s", os.computerID(), gatewayProxyId, me and "OK" or "Missing"))
+                    dash.log(string.format("[Gateway] Bound to Proxy ID: #%d", gatewayProxyId))
                 else
                     if not gatewayProxyId or gatewayProxyId ~= senderId then
                         gatewayProxyId = senderId
                         local f = fs.open("data/crafting_gateway.dat", "w")
                         f.write(tostring(gatewayProxyId))
                         f.close()
-                        print(string.format("[Gateway] Bound to local Proxy Gateway ID: %d", gatewayProxyId))
+                        dash.setStatus("CRAFTER: " .. myDimension:upper(), string.format("PC #%d | GW: #%d | ME: %s", os.computerID(), gatewayProxyId, me and "OK" or "Missing"))
                     end
 
                     crafting_manager.setProxyTarget(senderId)
@@ -95,20 +91,10 @@ while true do
                         crafting_manager.handleConfigSync(message.data)
                     elseif message.type == "GET_CRAFTABLES" then
                         local craftables = crafting_manager.getCraftablesList()
-                        rednet.send(senderId, {
-                            type          = "CRAFTABLES_RESPONSE",
-                            id            = message.id,
-                            targetProxyId = message.sourceProxyId,
-                            data          = craftables
-                        }, PROXY_LOCAL_PROTOCOL)
+                        rednet.send(senderId, { type = "CRAFTABLES_RESPONSE", id = message.id, targetProxyId = message.sourceProxyId, data = craftables }, PROXY_LOCAL_PROTOCOL)
                     elseif message.type == "GET_CRAFT_RULES" then
                         local rules = crafting_manager.getRulesList()
-                        rednet.send(senderId, {
-                            type          = "CRAFT_RULES_RESPONSE",
-                            id            = message.id,
-                            targetProxyId = message.sourceProxyId,
-                            data          = rules
-                        }, PROXY_LOCAL_PROTOCOL)
+                        rednet.send(senderId, { type = "CRAFT_RULES_RESPONSE", id = message.id, targetProxyId = message.sourceProxyId, data = rules }, PROXY_LOCAL_PROTOCOL)
                     end
                 end
             end
