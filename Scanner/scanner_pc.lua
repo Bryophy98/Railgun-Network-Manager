@@ -1,60 +1,56 @@
 -- ============================================================================
--- INVENTORY MANAGER SCANNER PC (Ender Top, Local Bottom)
--- Save as: scanner_pc.lua
+-- INVENTORY SCANNER STATION (Grayscale PrimeUI Dashboard)
+-- Save as: Scanner/scanner_pc.lua
 -- ============================================================================
 
-local SCAN_PROTOCOL = "scanner_link"
+local dash = require("apis.node_dashboard")
 
--- Open local modem on the bottom side
-if peripheral.getType("top") == "modem" then
-    rednet.open("top")
-    print("[Init] Rednet opened on bottom modem.")
-else
-    error("No modem found on the bottom side!")
+local SCAN_PROTOCOL = "scanner_link"
+local invManager    = peripheral.find("inventoryManager")
+
+if not invManager then
+    error("No Inventory Manager attached to Scanner PC!")
 end
 
-local inv = peripheral.find("inventoryManager")
-if not inv then error("Inventory Manager peripheral not found!") end
+for _, name in ipairs(peripheral.getNames()) do
+    if peripheral.getType(name) == "modem" then
+        rednet.open(name)
+    end
+end
 
-rednet.host(SCAN_PROTOCOL, "item_scanner")
-
-term.clear()
-term.setCursorPos(1, 1)
-print(string.rep("=", 32))
-print("  OFF-HAND SCANNER STATION ONLINE")
-print("  Target ID: 12 | Modem: Top")
-print(string.rep("=", 32))
+dash.init(
+    "OFF-HAND SCANNER STATION",
+    string.format("PC #%d | Protocol: %s | Ready", os.computerID(), SCAN_PROTOCOL)
+)
+_G.print = dash.log
+dash.log("[Scanner] Listening for Pocket PC scan requests...")
 
 while true do
-    local event, senderId, message, protocol = os.pullEvent("rednet_message")
-    
-    if protocol == SCAN_PROTOCOL and type(message) == "table" then
-        if message.type == "GET_OFFHAND_ITEM" or message.type == "SCAN_SLOT" then
-            print(string.format("[Scanner] Request received from Pocket ID #%d", senderId))
-            
-            local targetItem = inv.getItemInOffHand()
-            
-            if targetItem and targetItem.name then
-                print(string.format("[Scanner] Found off-hand item: %s (Count: %d)", targetItem.name, targetItem.count))
-                rednet.send(senderId, {
-                    type = "SCAN_RESPONSE",
-                    id = message.id,
-                    success = true,
-                    item = {
-                        name = targetItem.name,
-                        count = targetItem.count,
-                        displayName = targetItem.displayName or targetItem.name
-                    }
-                }, SCAN_PROTOCOL)
-            else
-                print("[Scanner Warning] Off-hand slot returned empty.")
-                rednet.send(senderId, {
-                    type = "SCAN_RESPONSE",
-                    id = message.id,
-                    success = false,
-                    reason = "Player off-hand slot is empty."
-                }, SCAN_PROTOCOL)
-            end
+    local senderId, msg, protocol = rednet.receive(SCAN_PROTOCOL)
+    if type(msg) == "table" and msg.type == "GET_OFFHAND_ITEM" then
+        dash.log(string.format("[Scan] Request from Pocket PC #%d", senderId))
+
+        local ok, item = pcall(function() return invManager.getItemInOffHand() end)
+        if ok and item and item.name then
+            dash.log(string.format("[Scan] Found: %s (x%d)", item.name, item.count or 1))
+            rednet.send(senderId, {
+                type    = "OFFHAND_ITEM_RESPONSE",
+                id      = msg.id,
+                success = true,
+                item    = {
+                    name        = item.name,
+                    displayName = item.displayName or item.name,
+                    count       = item.count or 1
+                }
+            }, SCAN_PROTOCOL)
+        else
+            dash.log("[Scan] Failed: Off-hand empty or player out of range.")
+            rednet.send(senderId, {
+                type    = "OFFHAND_ITEM_RESPONSE",
+                id      = msg.id,
+                success = false,
+                reason  = "Off-hand empty or player out of range."
+            }, SCAN_PROTOCOL)
         end
     end
 end
