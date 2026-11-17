@@ -65,6 +65,7 @@ function proxy_net.sendCrossDimPacket(recipientProxyId, flatPayload, originalQue
     local msgId = string.format("%s_req_%d_%d", MY_DIMENSION, os.epoch("local"), math.random(100, 999))
     local packet = {
         id            = msgId,
+        reqId         = flatPayload.reqId,
         orderId       = flatPayload.orderId,
         sourceQueryId = originalQueryId,
         senderDim     = MY_DIMENSION,
