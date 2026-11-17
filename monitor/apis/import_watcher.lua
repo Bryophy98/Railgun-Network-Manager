@@ -114,6 +114,7 @@ function import_watcher.tick()
         local amount = stock and stock.amount or 0
 
         if rule.status == "IDLE" and amount < rule.targetStock then
+            local reqId = string.format("%s_%d_%d", orderId, os.epoch("utc"), math.random(100, 999))
             chat(string.format("§c[Import Alert] %s low (%d/%d). Requesting...", orderId, amount, rule.targetStock))
             rule.status        = "PENDING"
             rule.baselineStock = amount
@@ -123,6 +124,7 @@ function import_watcher.tick()
 
             rednet.send(proxyTargetId, {
                 type          = "STOCK_REQUEST",
+                reqId         = reqId,
                 orderId       = orderId,
                 targetProxyId = rule.sourceProxyId,
                 item          = rule.item,
