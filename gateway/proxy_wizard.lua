@@ -1,52 +1,66 @@
 -- ============================================================================
--- PROXY WIZARD MODULE (First-Time Dimension Configuration)
--- Save as: proxy_wizard.lua
+-- PROXY WIZARD API (Grayscale PrimeUI First-Time Dimension Setup)
+-- Save as: gateway/proxy_wizard.lua
 -- ============================================================================
 
-local module = {}
+local PrimeUI = require("apis.primeui")
+local wizard  = {}
 
-function module.run()
-    term.clear()
-    term.setCursorPos(1, 1)
-    print("=== Interdimensional Proxy Setup ===")
-    
-    local dimList = {"earth", "beneath", "moon", "mars", "venus", "mercury"}
-    print("Select this Proxy PC's dimension location:")
-    for i, d in ipairs(dimList) do
-        print(string.format("  %d: %s", i, string.upper(d)))
-    end
-    
-    write("\nSelect option (1-6): ")
-    local dimChoice = tonumber(read()) or 1
-    local dimName = dimList[dimChoice] or "earth"
+local VALID_DIMS = { "earth", "beneath", "moon", "mars", "venus", "mercury" }
 
-    local newConfig = { 
-        dimension = dimName,
-        monitorId = nil -- Will be populated automatically upon first contact
-    }
-    
-    if not fs.exists("data") then
-        fs.makeDir("data")
-    end
-    
-    local file = fs.open("data/config.dat", "w")
-    if file then
-        file.write(textutils.serialize(newConfig))
-        file.close()
-    end
-    
-    print(string.format("\n[SUCCESS] Proxy configured for [%s]!", string.upper(dimName)))
-    sleep(1.5)
-end
-
-function module.load()
+function wizard.load()
     if fs.exists("data/config.dat") then
-        local file = fs.open("data/config.dat", "r")
-        local content = file.readAll()
-        file.close()
-        return textutils.unserialize(content)
+        local f = fs.open("data/config.dat", "r")
+        local data = textutils.unserialize(f.readAll())
+        f.close()
+        if type(data) == "table" and data.dimension then
+            return data
+        end
     end
     return nil
 end
 
-return module
+function wizard.run()
+    local entries = {}
+    for _, dim in ipairs(VALID_DIMS) do
+        table.insert(entries, string.upper(dim))
+    end
+
+    PrimeUI.clear()
+    term.setBackgroundColor(colors.black)
+    term.clear()
+
+    term.setCursorPos(1, 1)
+    term.setBackgroundColor(colors.lightGray)
+    term.setTextColor(colors.black)
+    term.clearLine()
+    PrimeUI.centerLabel(term.current(), 1, 1, 51, "GATEWAY SETUP WIZARD (PC #" .. os.computerID() .. ")", colors.black, colors.lightGray)
+
+    PrimeUI.label(term.current(), 4, 3, "Select this Gateway's dimension:", colors.lightGray, colors.black)
+    PrimeUI.borderBox(term.current(), 4, 5, 45, 9, colors.white, colors.black)
+    PrimeUI.selectionBox(term.current(), 4, 5, 45, 9, entries, "SELECT", nil, colors.white, colors.black)
+    PrimeUI.label(term.current(), 4, 16, "Use Arrow Keys + Enter or Click to confirm.", colors.gray, colors.black)
+
+    local _, _, chosen = PrimeUI.run()
+    PrimeUI.clear()
+
+    local selectedDim = string.lower(chosen or "earth")
+
+    if not fs.exists("data") then
+        fs.makeDir("data")
+    end
+
+    local config = {
+        dimension  = selectedDim,
+        monitorId  = nil,
+        craftingId = nil
+    }
+
+    local f = fs.open("data/config.dat", "w")
+    f.write(textutils.serialize(config))
+    f.close()
+
+    return config
+end
+
+return wizard
