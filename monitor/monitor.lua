@@ -53,6 +53,9 @@ end
 dash.log("[Init] Sent registration ping to Proxy gateway.")
 
 manager.init(MY_DIMENSION, me, chatBox, dimRoutes)
+if gatewayProxyId then
+    manager.setProxyTarget(gatewayProxyId)
+end
 
 local stockCheckTimer = os.startTimer(5)
 
