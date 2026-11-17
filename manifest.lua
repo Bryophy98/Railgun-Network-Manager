@@ -5,7 +5,8 @@ return {
         ["proxy.lua"]          = "gateway/proxy.lua",
         ["proxy_wizard.lua"]   = "gateway/proxy_wizard.lua",
         ["apis/proxy_net.lua"] = "gateway/apis/proxy_net.lua",
-        ["apis/primeui.lua"] = "shared/apis/primeui.lua"
+        ["apis/primeui.lua"] = "shared/apis/primeui.lua",
+        ["apis/node_dashboard.lua"] = "shared/apis/node_dashboard.lua"
     },
         monitor = {
         ["startup.lua"]             = "shared/startup.lua",
@@ -17,7 +18,8 @@ return {
         ["apis/export_shipper.lua"] = "monitor/apis/export_shipper.lua",
         ["apis/storage.lua"]        = "monitor/apis/storage.lua",
         ["apis/ae2_guard.lua"]      = "shared/apis/ae2_guard.lua",
-        ["apis/primeui.lua"]        = "shared/apis/primeui.lua"
+        ["apis/primeui.lua"]        = "shared/apis/primeui.lua",
+        ["apis/node_dashboard.lua"] = "shared/apis/node_dashboard.lua"
     },
     crafter = {
         ["startup.lua"]               = "shared/startup.lua",
@@ -26,7 +28,8 @@ return {
         ["apis/crafting_manager.lua"] = "crafter/apis/crafting_manager.lua",
         ["apis/storage.lua"]          = "crafter/apis/storage.lua",
         ["apis/ae2_guard.lua"]        = "shared/apis/ae2_guard.lua",
-        ["apis/primeui.lua"] = "shared/apis/primeui.lua"
+        ["apis/primeui.lua"] = "shared/apis/primeui.lua",
+        ["apis/node_dashboard.lua"] = "shared/apis/node_dashboard.lua"
     },
         pocket = {
         ["startup.lua"]          = "shared/startup.lua",
@@ -36,12 +39,14 @@ return {
         ["apis/pocket_ui.lua"]   = "pocket/apis/pocket_ui.lua",
         ["apis/import_menu.lua"] = "pocket/apis/import_menu.lua",
         ["apis/craft_menu.lua"]  = "pocket/apis/craft_menu.lua",
-        ["apis/primeui.lua"] = "shared/apis/primeui.lua"
+        ["apis/primeui.lua"] = "shared/apis/primeui.lua",
+        ["apis/node_dashboard.lua"] = "shared/apis/node_dashboard.lua"
     },
     scanner = {
         ["startup.lua"]    = "shared/startup.lua",
         ["updater.lua"]    = "shared/updater.lua",
         ["scanner_pc.lua"] = "Scanner/scanner_pc.lua",
-        ["apis/primeui.lua"] = "shared/apis/primeui.lua"
+        ["apis/primeui.lua"] = "shared/apis/primeui.lua",
+        ["apis/node_dashboard.lua"] = "shared/apis/node_dashboard.lua"
     }
 }
